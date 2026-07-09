@@ -46,10 +46,10 @@ class MainActivity : AppCompatActivity() {
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             focusService = (service as? FocusSessionService.LocalBinder)?.getService()
-            focusService?.onDistractionDetected = {
+            FocusSessionService.onDistractionDetected = {
                 runOnUiThread { showAlarmDialog() }
             }
-            focusService?.onAlarmDismissed = {
+            FocusSessionService.onAlarmDismissed = {
                 runOnUiThread { dismissAlarm() }
             }
             serviceBound = true
@@ -105,10 +105,10 @@ class MainActivity : AppCompatActivity() {
             ) { elapsed, total, distractions ->
                 Triple(elapsed, total, distractions)
             }.collect { (elapsed, total, distractions) ->
-                binding.timerOverlay.tvOverlayTimer.text = viewModel.formatTime(elapsed)
-                binding.timerOverlay.progressTimer.max = total
-                binding.timerOverlay.progressTimer.progress = elapsed
-                binding.timerOverlay.tvDistractionCount.text = "\uD83D\uDCF1 $distractions distractions"
+                binding.tvOverlayTimer.text = viewModel.formatTime(elapsed)
+                binding.progressTimer.max = total
+                binding.progressTimer.progress = elapsed
+                binding.tvDistractionCount.text = "\uD83D\uDCF1 $distractions distractions"
             }
         }
 
@@ -120,19 +120,19 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             viewModel.sessionDuration.collect { secs ->
-                binding.homeScreen.tvTimer.text = viewModel.formatTime(secs)
+                binding.tvTimer.text = viewModel.formatTime(secs)
             }
         }
 
         lifecycleScope.launch {
             viewModel.repository.sessionHistory.collect { sessions ->
                 if (sessions.isEmpty()) {
-                    binding.historyScreen.tvHistoryEmpty.visibility = View.VISIBLE
-                    binding.historyScreen.rvHistory.visibility = View.GONE
+                    binding.tvHistoryEmpty.visibility = View.VISIBLE
+                    binding.rvHistory.visibility = View.GONE
                 } else {
-                    binding.historyScreen.tvHistoryEmpty.visibility = View.GONE
-                    binding.historyScreen.rvHistory.visibility = View.VISIBLE
-                    (binding.historyScreen.rvHistory.adapter as? SessionAdapter)?.submitList(sessions.reversed())
+                    binding.tvHistoryEmpty.visibility = View.GONE
+                    binding.rvHistory.visibility = View.VISIBLE
+                    (binding.rvHistory.adapter as? SessionAdapter)?.submitList(sessions.reversed())
                 }
             }
         }
@@ -141,28 +141,25 @@ class MainActivity : AppCompatActivity() {
     // ===== CLICK HANDLERS =====
 
     private fun setupClickListeners() {
-        // Home — preset chips
-        binding.homeScreen.chip5min.setOnClickListener { selectPreset(300) }
-        binding.homeScreen.chip15min.setOnClickListener { selectPreset(900) }
-        binding.homeScreen.chip25min.setOnClickListener { selectPreset(1500) }
-        binding.homeScreen.chip45min.setOnClickListener { selectPreset(2700) }
+        binding.chip5min.setOnClickListener { selectPreset(300) }
+        binding.chip15min.setOnClickListener { selectPreset(900) }
+        binding.chip25min.setOnClickListener { selectPreset(1500) }
+        binding.chip45min.setOnClickListener { selectPreset(2700) }
 
-        // Home — buttons
-        binding.homeScreen.btnStart.setOnClickListener { startFocusSession() }
-        binding.homeScreen.btnSetup.setOnClickListener { viewModel.navigateTo(Screen.SETUP) }
-        binding.homeScreen.btnHistory.setOnClickListener { viewModel.navigateTo(Screen.HISTORY) }
+        binding.btnStart.setOnClickListener { startFocusSession() }
+        binding.btnSetup.setOnClickListener { viewModel.navigateTo(Screen.SETUP) }
+        binding.btnHistory.setOnClickListener { viewModel.navigateTo(Screen.HISTORY) }
 
-        // Timer overlay
-        binding.timerOverlay.btnPauseOverlay.setOnClickListener {
+        binding.btnPauseOverlay.setOnClickListener {
             if (viewModel.timerState.value == TimerState.RUNNING) {
                 viewModel.pauseSession()
-                binding.timerOverlay.btnPauseOverlay.setText(R.string.btn_resume)
+                binding.btnPauseOverlay.setText(R.string.btn_resume)
             } else {
                 viewModel.resumeSession()
-                binding.timerOverlay.btnPauseOverlay.setText(R.string.btn_pause)
+                binding.btnPauseOverlay.setText(R.string.btn_pause)
             }
         }
-        binding.timerOverlay.btnStopOverlay.setOnClickListener {
+        binding.btnStopOverlay.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle(R.string.stop_confirm_title)
                 .setMessage(R.string.stop_confirm_msg)
@@ -174,11 +171,10 @@ class MainActivity : AppCompatActivity() {
                 .show()
         }
 
-        // Setup screen
-        binding.setupScreen.btnBackSetup.setOnClickListener { viewModel.navigateTo(Screen.HOME) }
-        binding.setupScreen.btnSaveSetup.setOnClickListener { saveSetup() }
-        binding.setupScreen.btnPreviewAlarm.setOnClickListener { previewAlarm() }
-        binding.setupScreen.editSearchApps.addTextChangedListener(object : TextWatcher {
+        binding.btnBackSetup.setOnClickListener { viewModel.navigateTo(Screen.HOME) }
+        binding.btnSaveSetup.setOnClickListener { saveSetup() }
+        binding.btnPreviewAlarm.setOnClickListener { previewAlarm() }
+        binding.editSearchApps.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 appAdapter.filter(s?.toString() ?: "")
@@ -186,17 +182,16 @@ class MainActivity : AppCompatActivity() {
             override fun afterTextChanged(s: Editable?) {}
         })
 
-        // History screen
-        binding.historyScreen.btnBackHistory.setOnClickListener { viewModel.navigateTo(Screen.HOME) }
+        binding.btnBackHistory.setOnClickListener { viewModel.navigateTo(Screen.HOME) }
     }
 
     private fun selectPreset(seconds: Int) {
         viewModel.setDuration(seconds)
         listOf(
-            binding.homeScreen.chip5min to 300,
-            binding.homeScreen.chip15min to 900,
-            binding.homeScreen.chip25min to 1500,
-            binding.homeScreen.chip45min to 2700
+            binding.chip5min to 300,
+            binding.chip15min to 900,
+            binding.chip25min to 1500,
+            binding.chip45min to 2700
         ).forEach { (chip, sec) ->
             chip.background = getDrawable(
                 if (sec == seconds) R.drawable.chip_bg_selected else R.drawable.chip_bg
@@ -274,8 +269,8 @@ class MainActivity : AppCompatActivity() {
     // ===== SETUP =====
 
     private fun setupHistoryList() {
-        binding.historyScreen.rvHistory.layoutManager = LinearLayoutManager(this)
-        binding.historyScreen.rvHistory.adapter = SessionAdapter()
+        binding.rvHistory.layoutManager = LinearLayoutManager(this)
+        binding.rvHistory.adapter = SessionAdapter()
     }
 
     private fun setupAppList() {
@@ -294,8 +289,8 @@ class MainActivity : AppCompatActivity() {
             if (selected) selectedApps.add(pkg) else selectedApps.remove(pkg)
         }
 
-        binding.setupScreen.rvApps.layoutManager = LinearLayoutManager(this)
-        binding.setupScreen.rvApps.adapter = appAdapter
+        binding.rvApps.layoutManager = LinearLayoutManager(this)
+        binding.rvApps.adapter = appAdapter
 
         lifecycleScope.launch {
             val saved = viewModel.repository.distractingApps.first()
@@ -306,9 +301,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val source = viewModel.repository.alarmSource.first()
             when (source) {
-                "builtin" -> binding.setupScreen.radioBuiltin.isChecked = true
-                "file" -> binding.setupScreen.radioFile.isChecked = true
-                "recording" -> binding.setupScreen.radioRecord.isChecked = true
+                "builtin" -> binding.radioBuiltin.isChecked = true
+                "file" -> binding.radioFile.isChecked = true
+                "recording" -> binding.radioRecord.isChecked = true
             }
         }
     }
@@ -317,7 +312,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.repository.saveDistractingApps(selectedApps.toSet())
 
-            val source = when (binding.setupScreen.radioAlarm.checkedRadioButtonId) {
+            val source = when (binding.radioAlarm.checkedRadioButtonId) {
                 R.id.radioFile -> "file"
                 R.id.radioRecord -> "recording"
                 else -> "builtin"
@@ -331,7 +326,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun previewAlarm() {
         soundManager.playBuiltin()
-        binding.setupScreen.btnPreviewAlarm.postDelayed({
+        binding.btnPreviewAlarm.postDelayed({
             soundManager.stop()
         }, 3000)
     }
