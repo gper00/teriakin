@@ -1,0 +1,30 @@
+# VS Code
+.vscode/
+
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local config
+local.properties
+*.iml
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.DS_Store
+
+# Keystore
+*.jks
+*.keystore
+
+# Generated files
+gen/
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+.codegraph
