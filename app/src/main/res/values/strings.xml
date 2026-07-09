@@ -1,0 +1,37 @@
+<resources>
+    <string name="app_name">FocusBuddy</string>
+    <string name="timer_title">FOCUS TIMER</string>
+    <string name="btn_start">START FOCUS SESSION</string>
+    <string name="btn_pause">Pause</string>
+    <string name="btn_resume">Resume</string>
+    <string name="btn_stop">Stop</string>
+    <string name="btn_go_back">Go Back</string>
+    <string name="btn_dismiss_end">Dismiss &amp; End</string>
+    <string name="preset_5m">5m</string>
+    <string name="preset_15m">15m</string>
+    <string name="preset_25m">25m</string>
+    <string name="preset_45m">45m</string>
+    <string name="label_distractions">distractions</string>
+    <string name="label_custom">Custom</string>
+    <string name="setup_title">Settings</string>
+    <string name="setup_apps">Distracting Apps</string>
+    <string name="setup_alarm">Alarm Sound</string>
+    <string name="setup_alarm_builtin">Built-in Sound</string>
+    <string name="setup_alarm_file">Pick MP3 File</string>
+    <string name="setup_alarm_record">Record New</string>
+    <string name="setup_preview">Preview</string>
+    <string name="setup_save">Save</string>
+    <string name="history_title">Session History</string>
+    <string name="history_empty">No focus sessions yet</string>
+    <string name="history_today">Today</string>
+    <string name="stop_confirm_title">End session?</string>
+    <string name="stop_confirm_msg">Your focus session will be ended and saved.</string>
+    <string name="alarm_title">GET BACK TO FOCUS!</string>
+    <string name="alarm_text">You opened a distracting app!</string>
+    <string name="notif_channel_timer">Focus Timer</string>
+    <string name="notif_timer_running">Focus session is running</string>
+    <string name="notif_session_complete">Focus session complete! 🎉</string>
+    <string name="usage_permission_title">Permission Needed</string>
+    <string name="usage_permission_msg">Enable usage access so FocusBuddy can detect distracting apps.</string>
+    <string name="tap_to_set">Set duration</string>
+</resources>
