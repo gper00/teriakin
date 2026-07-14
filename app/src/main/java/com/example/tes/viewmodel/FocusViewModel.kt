@@ -8,10 +8,17 @@ import com.example.tes.data.Session
 import com.example.tes.data.SessionRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+sealed class SessionEvent {
+    data object Completed : SessionEvent()
+}
 
 enum class TimerState { IDLE, RUNNING, PAUSED, COMPLETED, INTERRUPTED }
 enum class Screen { HOME, SETUP, HISTORY }
@@ -34,6 +41,9 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _currentScreen = MutableStateFlow(Screen.HOME)
     val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
+
+    private val _events = MutableSharedFlow<SessionEvent>(extraBufferCapacity = 1)
+    val events: SharedFlow<SessionEvent> = _events.asSharedFlow()
 
     private var sessionStartTime: Long = 0L
     private var timerJob: Job? = null
@@ -90,9 +100,9 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopSession() {
         timerJob?.cancel()
-        _timerState.value = TimerState.COMPLETED
         saveSession(completed = false)
         resetState()
+        _timerState.value = TimerState.IDLE
     }
 
     fun triggerDistraction() {
@@ -121,16 +131,19 @@ class FocusViewModel(application: Application) : AndroidViewModel(application) {
 
     fun abortSessionFromAlarm() {
         timerJob?.cancel()
-        _timerState.value = TimerState.INTERRUPTED
         saveSession(completed = false)
         resetState()
+        _timerState.value = TimerState.IDLE
     }
 
     private fun completeSession(completed: Boolean) {
         timerJob?.cancel()
-        _timerState.value = if (completed) TimerState.COMPLETED else TimerState.INTERRUPTED
         saveSession(completed)
         resetState()
+        _timerState.value = TimerState.IDLE
+        if (completed) {
+            _events.tryEmit(SessionEvent.Completed)
+        }
     }
 
     private fun saveSession(completed: Boolean) {

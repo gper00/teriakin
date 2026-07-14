@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="56dp"
+    android:layout_height="64dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingHorizontal="8dp"
-    android:background="?attr/selectableItemBackground">
+    android:paddingHorizontal="12dp"
+    android:layout_marginBottom="6dp"
+    android:background="@drawable/card_bg"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
 
     <ImageView
         android:id="@+id/ivAppIcon"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
         android:scaleType="centerInside" />
 
     <TextView

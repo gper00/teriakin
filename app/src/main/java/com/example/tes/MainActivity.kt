@@ -4,10 +4,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
@@ -20,6 +22,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.tes.data.AppPreferences
 import com.example.tes.data.Session
 import com.example.tes.databinding.ActivityMainBinding
 import com.example.tes.service.FocusSessionService
@@ -46,13 +49,12 @@ class MainActivity : AppCompatActivity() {
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             focusService = (service as? FocusSessionService.LocalBinder)?.getService()
-            FocusSessionService.onDistractionDetected = {
-                runOnUiThread { showAlarmDialog() }
-            }
-            FocusSessionService.onAlarmDismissed = {
-                runOnUiThread { dismissAlarm() }
-            }
             serviceBound = true
+            // If alarm was triggered while activity was not in foreground (e.g. user was
+            // on Instagram), show the dialog now that we're reconnected.
+            if (focusService?.isAlarmActive == true) {
+                showAlarmDialog()
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -64,6 +66,25 @@ class MainActivity : AppCompatActivity() {
     private val installedApps = mutableListOf<AppInfo>()
     private val selectedApps = mutableSetOf<String>()
     private lateinit var appAdapter: AppListAdapter
+
+    private val filePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            // Take persistable permission so we can read this URI across reboots
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            lifecycleScope.launch {
+                viewModel.repository.saveAlarmCustomPath(uri.toString())
+                finishSave(uri.toString())
+            }
+        } else {
+            Toast.makeText(this, "No file selected", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,6 +98,10 @@ class MainActivity : AppCompatActivity() {
         setupClickListeners()
         setupAppList()
         setupHistoryList()
+    }
+
+    override fun onResume() {
+        super.onResume()
         checkUsageStatsPermission()
     }
 
@@ -88,11 +113,17 @@ class MainActivity : AppCompatActivity() {
                 when (state) {
                     TimerState.IDLE -> showScreen(Screen.HOME)
                     TimerState.RUNNING, TimerState.PAUSED -> showTimerOverlay()
-                    TimerState.COMPLETED -> {
-                        showScreen(Screen.HOME)
+                    TimerState.COMPLETED, TimerState.INTERRUPTED -> { }
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            viewModel.events.collect { event ->
+                when (event) {
+                    is com.example.tes.viewmodel.SessionEvent.Completed -> {
                         Toast.makeText(this@MainActivity, "Focus complete! 🎉", Toast.LENGTH_SHORT).show()
                     }
-                    TimerState.INTERRUPTED -> { /* handled by alarm dialog */ }
                 }
             }
         }
@@ -160,11 +191,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.btnStopOverlay.setOnClickListener {
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(this, R.style.Theme_FocusBuddy_AlertDialog)
                 .setTitle(R.string.stop_confirm_title)
                 .setMessage(R.string.stop_confirm_msg)
                 .setPositiveButton("Yes, end it") { _, _ ->
+                    soundManager.stop()
                     viewModel.stopSession()
+                    serviceBound = false
+                    focusService = null
                     stopService(Intent(this, FocusSessionService::class.java))
                 }
                 .setNegativeButton("Cancel", null)
@@ -205,6 +239,8 @@ class MainActivity : AppCompatActivity() {
     // ===== SESSION CONTROLS =====
 
     private fun startFocusSession() {
+        if (serviceBound) return
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 100)
@@ -213,6 +249,22 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.startSession()
         val intent = Intent(this, FocusSessionService::class.java)
+
+        FocusSessionService.onDistractionDetected = {
+            runOnUiThread { showAlarmDialog() }
+        }
+        FocusSessionService.onAlarmDismissed = {
+            runOnUiThread { dismissAlarm() }
+        }
+        FocusSessionService.onSessionEndRequested = {
+            runOnUiThread {
+                soundManager.stop()
+                viewModel.abortSessionFromAlarm()
+                serviceBound = false
+                focusService = null
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
@@ -224,10 +276,13 @@ class MainActivity : AppCompatActivity() {
     // ===== ALARM =====
 
     private fun showAlarmDialog() {
-        soundManager.playBuiltin()
+        // Activity may be finishing/destroyed if user switched to Instagram and system
+        // reclaimed the activity. AlertDialog.Builder would throw BadTokenException.
+        if (isFinishing || isDestroyed) return
+
         viewModel.triggerDistraction()
 
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_FocusBuddy_AlertDialog)
             .setTitle("\uD83D\uDEA8 GET BACK TO FOCUS!")
             .setMessage("You opened a distracting app!")
             .setPositiveButton("Go Back") { _, _ ->
@@ -239,6 +294,8 @@ class MainActivity : AppCompatActivity() {
                 soundManager.stop()
                 focusService?.dismissAlarm()
                 viewModel.abortSessionFromAlarm()
+                serviceBound = false
+                focusService = null
                 stopService(Intent(this, FocusSessionService::class.java))
             }
             .setCancelable(false)
@@ -309,16 +366,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveSetup() {
+        val checkedId = binding.radioAlarm.checkedRadioButtonId
+
+        // Save distracting apps regardless
         lifecycleScope.launch {
             viewModel.repository.saveDistractingApps(selectedApps.toSet())
+        }
 
-            val source = when (binding.radioAlarm.checkedRadioButtonId) {
-                R.id.radioFile -> "file"
-                R.id.radioRecord -> "recording"
-                else -> "builtin"
+        when (checkedId) {
+            R.id.radioFile -> {
+                filePickerLauncher.launch(arrayOf("audio/*"))
             }
-            viewModel.repository.saveAlarmSource(source)
+            R.id.radioRecord -> {
+                Toast.makeText(this, "Recording not yet available — use Built-in or MP3", Toast.LENGTH_SHORT).show()
+            }
+            else -> {
+                lifecycleScope.launch {
+                    viewModel.repository.saveAlarmSource(AppPreferences.ALARM_SOURCE_BUILTIN)
+                    finishSave(null)
+                }
+            }
+        }
+    }
 
+    private fun finishSave(customPath: String?) {
+        lifecycleScope.launch {
+            if (customPath != null) {
+                viewModel.repository.saveAlarmSource(AppPreferences.ALARM_SOURCE_FILE)
+            }
             Toast.makeText(this@MainActivity, "Settings saved", Toast.LENGTH_SHORT).show()
             viewModel.navigateTo(Screen.HOME)
         }
@@ -335,11 +410,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkUsageStatsPermission() {
         if (!hasUsageStatsPermission()) {
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(this, R.style.Theme_FocusBuddy_AlertDialog)
                 .setTitle(R.string.usage_permission_title)
                 .setMessage(R.string.usage_permission_msg)
                 .setPositiveButton("Open Settings") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                    try {
+                        startActivity(intent)
+                    } catch (_: Exception) {
+                        startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", packageName, null)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                        )
+                    }
                 }
                 .setNegativeButton("Later", null)
                 .show()

@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.annotation.RawRes
 import com.example.tes.R
 
@@ -29,20 +30,22 @@ class SoundManager(private val context: Context) {
 
     fun playBuiltin(sound: BuiltinSound = BuiltinSound.DEFAULT) {
         stop()
-        mediaPlayer = MediaPlayer.create(context, sound.resId).apply {
-            isLooping = true
-            setVolume(1.0f, 1.0f)
-            start()
+        MediaPlayer.create(context, sound.resId)?.let {
+            it.isLooping = true
+            it.setVolume(1.0f, 1.0f)
+            it.start()
+            mediaPlayer = it
         }
         vibrate()
     }
 
     fun playFile(path: String) {
         stop()
-        mediaPlayer = MediaPlayer.create(context, Uri.parse(path)).apply {
-            isLooping = true
-            setVolume(1.0f, 1.0f)
-            start()
+        MediaPlayer.create(context, Uri.parse(path))?.let {
+            it.isLooping = true
+            it.setVolume(1.0f, 1.0f)
+            it.start()
+            mediaPlayer = it
         }
         vibrate()
     }
@@ -59,17 +62,21 @@ class SoundManager(private val context: Context) {
     val isPlaying: Boolean get() = mediaPlayer?.isPlaying == true
 
     private fun vibrate() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(
-                VibrationEffect.createWaveform(
-                    longArrayOf(0, 500, 300, 500, 300),
-                    intArrayOf(0, 255, 0, 255, 0),
-                    -1
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(
+                    VibrationEffect.createWaveform(
+                        longArrayOf(0, 500, 300, 500, 300),
+                        intArrayOf(0, 255, 0, 255, 0),
+                        -1
+                    )
                 )
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(longArrayOf(0, 500, 300, 500, 300), -1)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(longArrayOf(0, 500, 300, 500, 300), -1)
+            }
+        } catch (e: Exception) {
+            Log.w("SoundManager", "Vibration failed: ${e.message}")
         }
     }
 
