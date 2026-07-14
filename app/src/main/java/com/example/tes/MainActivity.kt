@@ -491,12 +491,18 @@ class AppListAdapter(
         val app = filteredList[position]
         holder.name.text = app.name
         holder.icon.setImageDrawable(app.icon)
+
+        // Clear listener before setChecked to prevent infinite loop
+        holder.checkbox.setOnCheckedChangeListener(null)
         holder.checkbox.isChecked = selected.contains(app.packageName)
+
+        // Track selection whether user clicks the CheckBox directly OR the item row
+        holder.checkbox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) selected.add(app.packageName) else selected.remove(app.packageName)
+            onToggle(app.packageName, isChecked)
+        }
         holder.itemView.setOnClickListener {
-            val newChecked = !selected.contains(app.packageName)
-            if (newChecked) selected.add(app.packageName) else selected.remove(app.packageName)
-            holder.checkbox.isChecked = newChecked
-            onToggle(app.packageName, newChecked)
+            holder.checkbox.isChecked = !holder.checkbox.isChecked
         }
     }
 

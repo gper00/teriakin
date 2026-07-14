@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.tes.MainActivity
 import com.example.tes.R
 import com.example.tes.data.AppPreferences
 import com.example.tes.sound.SoundManager
@@ -130,6 +131,7 @@ class FocusSessionService : Service() {
     fun dismissAlarm() {
         soundManager.stop()
         isAlarmActive = false
+        updateNotification("Focus session is running...")
         onAlarmDismissed?.invoke()
     }
 
@@ -178,17 +180,29 @@ class FocusSessionService : Service() {
 
     /** Updates the foreground notification to a heads-up alarm notification. */
     private fun updateAlarmNotification(distractingPackage: String) {
-        val dismissIntent = Intent(this, FocusSessionService::class.java).apply {
-            action = ACTION_DISMISS_ALARM
+        // Content intent: tapping notification body opens FocusBuddy app
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+        val openAppPendingIntent = PendingIntent.getActivity(
+            this, 2, openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // "Go Back" action: opens FocusBuddy app WITHOUT dismissing alarm.
+        // Sound keeps playing until user explicitly dismisses via dialog inside the app.
+        val goBackIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val goBackPendingIntent = PendingIntent.getActivity(
+            this, 0, goBackIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // "End Session" action: stops everything
         val endIntent = Intent(this, FocusSessionService::class.java).apply {
             action = ACTION_END_SESSION
         }
-
-        val dismissPendingIntent = PendingIntent.getService(
-            this, 0, dismissIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
         val endPendingIntent = PendingIntent.getService(
             this, 1, endIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -202,7 +216,8 @@ class FocusSessionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(android.R.drawable.ic_media_play, "Go Back", dismissPendingIntent)
+            .setContentIntent(openAppPendingIntent)
+            .addAction(android.R.drawable.ic_media_play, "Go Back", goBackPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "End Session", endPendingIntent)
             .build()
 
