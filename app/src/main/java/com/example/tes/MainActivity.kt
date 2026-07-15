@@ -50,10 +50,16 @@ class MainActivity : AppCompatActivity() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             focusService = (service as? FocusSessionService.LocalBinder)?.getService()
             serviceBound = true
-            // If alarm was triggered while activity was not in foreground (e.g. user was
-            // on Instagram), show the dialog now that we're reconnected.
-            if (focusService?.isAlarmActive == true) {
-                showAlarmDialog()
+            when {
+                focusService?.isAlarmActive == true -> {
+                    // Alarm was triggered while activity was not in foreground
+                    showAlarmDialog()
+                }
+                viewModel.timerState.value == TimerState.IDLE -> {
+                    // Service is alive but no alarm → likely opened from "Go Back"
+                    // notification. Restore the timer overlay.
+                    resumeSessionFromNotification()
+                }
             }
         }
 
@@ -271,6 +277,34 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
         }
         bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    }
+
+    /**
+     * Called when we reconnect to an already-running service (e.g. after tapping
+     * "Go Back" from notification when the activity was destroyed).
+     *
+     * Sets up callbacks and restarts the ViewModel timer so the timer overlay
+     * shows instead of the idle home screen.
+     */
+    private fun resumeSessionFromNotification() {
+        if (viewModel.timerState.value != TimerState.IDLE) return
+
+        FocusSessionService.onDistractionDetected = {
+            runOnUiThread { showAlarmDialog() }
+        }
+        FocusSessionService.onAlarmDismissed = {
+            runOnUiThread { dismissAlarm() }
+        }
+        FocusSessionService.onSessionEndRequested = {
+            runOnUiThread {
+                soundManager.stop()
+                viewModel.abortSessionFromAlarm()
+                serviceBound = false
+                focusService = null
+            }
+        }
+
+        viewModel.startSession()
     }
 
     // ===== ALARM =====

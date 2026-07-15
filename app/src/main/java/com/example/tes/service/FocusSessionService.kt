@@ -69,12 +69,18 @@ class FocusSessionService : Service() {
                 dismissAlarm()
                 // Revert notification to normal
                 updateNotification("Focus session is running...")
+                // Open the app so user can continue the session
+                val goBackOpenApp = Intent(this, MainActivity::class.java).apply {
+                    this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
+                startActivity(goBackOpenApp)
                 return START_STICKY
             }
             ACTION_END_SESSION -> {
                 soundManager.stop()
                 isAlarmActive = false
                 onSessionEndRequested?.invoke()
+                stopForeground(true)  // Remove notification
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -88,6 +94,8 @@ class FocusSessionService : Service() {
     override fun onBind(intent: Intent?): IBinder? = binder
 
     private fun startMonitoring() {
+        // Cancel any previous monitoring loop to prevent duplicates
+        monitorJob?.cancel()
         monitorJob = serviceScope.launch {
             val distractingApps = prefs.distractingApps.first()
             Log.d("FocusSessionService", "Monitoring started. Distracting apps: $distractingApps")
@@ -139,6 +147,10 @@ class FocusSessionService : Service() {
         soundManager.release()
         monitorJob?.cancel()
         serviceScope.cancel()
+        // Ensure notification is removed (some OEMs like ColorOS don't auto-remove)
+        try {
+            stopForeground(true)
+        } catch (_: Exception) {}
         super.onDestroy()
     }
 
@@ -189,12 +201,13 @@ class FocusSessionService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // "Go Back" action: opens FocusBuddy app WITHOUT dismissing alarm.
-        // Sound keeps playing until user explicitly dismisses via dialog inside the app.
-        val goBackIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        // "Go Back" action: dismisses alarm AND opens app.
+        // Uses SERVICE intent so the handler in onStartCommand can call dismissAlarm()
+        // before opening MainActivity — preventing sound-from-notification bug.
+        val goBackIntent = Intent(this, FocusSessionService::class.java).apply {
+            action = ACTION_DISMISS_ALARM
         }
-        val goBackPendingIntent = PendingIntent.getActivity(
+        val goBackPendingIntent = PendingIntent.getService(
             this, 0, goBackIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
